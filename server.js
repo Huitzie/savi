@@ -6,6 +6,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+console.log("🔍 OpenAI Key Loaded?:", process.env.OPENAI_API_KEY ? "✅ Yes" : "❌ No");
+
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post("/chat", async (req, res) => {
