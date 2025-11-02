@@ -1,5 +1,4 @@
-// ✅ server.js — Directional & Memory-Enabled Build for Savi (Nova Web Co)
-
+// ✅ Savi - Simplified GoDaddy Server (direct handshake version)
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
@@ -7,58 +6,43 @@ const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
+
+// Allow all origins (for simplicity)
 app.use(cors());
 app.use(bodyParser.json());
 
+// Initialize OpenAI
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Simple in-memory store per user
-const memoryStore = {};
+// Memory per user (temporary)
+const memory = {};
 
-// 🌟 SYSTEM DIRECTIVE: Define Savi's core role and personality
+// Savi's direction (personality and goals)
 const systemPrompt = `
-You are **Savi**, the friendly and professional AI sales assistant for **Nova Web Company** in Phoenix, AZ.
-
-🎯 Your purpose:
-- Engage visitors conversationally to learn about their business.
-- Guide them toward Nova Web Company’s services: web design, SEO, and digital marketing.
-- Gather useful info (name, phone, email, type of business, goals).
-- Offer to schedule a consultation or callback.
-- Always respond helpfully and naturally, using light humor and friendliness.
-
-🧠 Style:
-- Conversational, warm, and human-like. Think "smart and relatable sales rep."
-- Use emojis sparingly to add friendliness.
-- Keep responses short (2–4 sentences max).
-- NEVER mention competitors or compare Nova Web Company to others.
-- NEVER disclose details about the owner (Henry Serena) beyond “our founder”.
-- If the user goes off-topic, gently bring the conversation back to web design, marketing, or growing their business online.
-
-💬 Example tone:
-User: “Hey Savi, do you make websites?”
-Savi: “Absolutely! We build fast, beautiful websites that actually bring in traffic. What kind of business do you run?”
+You are Savi, Nova Web Company's friendly AI assistant in Phoenix, AZ.
+Your mission: talk naturally with website visitors, learn about their business,
+and help them understand how Nova Web Company can improve their online presence
+through web design, SEO, and marketing. You should be warm, confident, and concise.
+Gather the visitor's name, phone, and email when possible, and offer a free consultation.
 `;
 
-// === CHAT ENDPOINT ===
+// === POST /chat ===
 app.post("/chat", async (req, res) => {
   try {
     const { userId, messages } = req.body;
+    if (!userId || !Array.isArray(messages))
+      return res.status(400).json({ error: "Missing or invalid data" });
 
-    if (!userId || !messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: "Invalid request body" });
-    }
+    // initialize user memory
+    if (!memory[userId]) memory[userId] = [{ role: "system", content: systemPrompt }];
 
-    // Ensure user memory exists
-    if (!memoryStore[userId]) memoryStore[userId] = [
-      { role: "system", content: systemPrompt },
-    ];
+    const fullHistory = [...memory[userId], ...messages];
 
-    // Merge new messages into memory
-    const fullHistory = [...memoryStore[userId], ...messages];
+    console.log(`🟣 [${new Date().toISOString()}] Incoming message from ${userId}`);
 
-    // Create OpenAI completion
+    // Talk to OpenAI
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: fullHistory,
@@ -66,30 +50,17 @@ app.post("/chat", async (req, res) => {
       max_tokens: 400,
     });
 
-    const reply =
-      completion.choices?.[0]?.message?.content ||
-      "Sorry, something glitched — could you try that again?";
+    const reply = completion.choices?.[0]?.message?.content || "Sorry, I didn’t catch that.";
 
-    // Save updated conversation
-    memoryStore[userId] = fullHistory.concat([
-      { role: "assistant", content: reply },
-    ]);
+    // update memory
+    memory[userId] = fullHistory.concat([{ role: "assistant", content: reply }]);
 
+    console.log(`🟢 Reply sent to ${userId}: ${reply.slice(0, 60)}...`);
     res.json({ reply });
   } catch (err) {
-    console.error("🔥 Chat Error:", err);
-    res.status(500).json({
-      error: "Server Error",
-      details: err.message || err.toString(),
-    });
+    console.error("🔥 Savi Chat Error:", err.message);
+    res.status(500).json({ reply: "⚠️ Server issue, please try again later." });
   }
-});
-
-// === CLEAR MEMORY ENDPOINT ===
-app.post("/clear-memory", (req, res) => {
-  const { userId } = req.body;
-  if (userId) delete memoryStore[userId];
-  res.json({ success: true, message: "Memory cleared" });
 });
 
 const PORT = process.env.PORT || 3000;
