@@ -1,14 +1,15 @@
-// ✅ SaviChat Serverless API (Vercel-Compatible)
-// Includes: OpenAI chat, memory, Gmail email, summary + transcript
+// ✅ SaviChat Serverless API (Vercel-Compatible, Final 2025 Build)
+// Includes: OpenAI chat, in-memory history, Gmail SMTP, lead email, summary + transcript
 
 import OpenAI from "openai";
 import nodemailer from "nodemailer";
 
+// ⭐ REQUIRED BY VERCEL — FIXED
 export const config = {
-  runtime: "nodejs18.x",
+  runtime: "nodejs"
 };
 
-// === In-memory store (resets on each deployment, but works for active sessions) ===
+// === In-memory chat history (temporary per deployment) ===
 const memory = {};
 
 const systemPrompt = `
@@ -23,7 +24,7 @@ Keep responses short (2–4 sentences)
 
 // === OpenAI Client ===
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // === Gmail Transport (App Password Required) ===
@@ -31,8 +32,8 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+    pass: process.env.SMTP_PASS
+  }
 });
 
 // === Generate Conversation Summary ===
@@ -46,13 +47,14 @@ async function makeSummary(history) {
     messages: [
       {
         role: "system",
-        content: "Summarize the conversation in 4–6 sentences. Focus on lead details and their needs.",
+        content:
+          "Summarize the conversation in 4–6 sentences. Focus on lead details and their needs."
       },
       {
         role: "user",
-        content: formatted,
-      },
-    ],
+        content: formatted
+      }
+    ]
   });
 
   return completion.choices[0].message.content;
@@ -84,11 +86,11 @@ ${transcript}
     from: process.env.SMTP_USER,
     to: process.env.ADMIN_EMAIL,
     subject: "🔥 New Lead from SaviChat",
-    text: message,
+    text: message
   });
 }
 
-// === MAIN HANDLER ===
+// === MAIN API HANDLER ===
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(404).json({ error: "Route not found" });
@@ -101,19 +103,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid request body" });
     }
 
-    // Initialize memory
+    // Initialize memory for new users
     if (!memory[userId]) {
       memory[userId] = [{ role: "system", content: systemPrompt }];
     }
 
     const fullHistory = [...memory[userId], ...messages];
 
-    // === OpenAI Chat ===
+    // === Call OpenAI ===
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: fullHistory,
       temperature: 0.7,
-      max_tokens: 400,
+      max_tokens: 400
     });
 
     const reply =
@@ -141,12 +143,13 @@ export default async function handler(req, res) {
       await sendLeadEmail(leadInfo, summary, transcript);
     }
 
-    // === Return Chat Response ===
+    // === Return the Chat Response to Frontend ===
     return res.status(200).json({ reply });
+
   } catch (err) {
     console.error("🔥 SaviChat API Error:", err);
     return res.status(500).json({
-      reply: "⚠️ Server issue — try again in a moment.",
+      reply: "⚠️ Server issue — try again in a moment."
     });
   }
 }
